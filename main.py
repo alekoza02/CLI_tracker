@@ -62,18 +62,24 @@ class Terminal:
     return shutil.get_terminal_size()
 
 
-  def clear(self):
-    print("\033[2J\033[H", end='', flush=True)
+  def reset(self, clear=False):
+    if clear:
+      print("\033[2J", end='', flush=True) 
+    print("\033[H", end='', flush=True)
 
 
   def render_frame(self):
-    self.clear()
+    self.reset()
 
+    # for y in range(self.h):
+    #   if y < self.h - 1:
+    #     print("".join(self.canvas[y]))
+    #   else:
+    #     print("".join(self.canvas[y]), end="", flush=True)
+    ris = ""
     for y in range(self.h):
-      if y < self.h - 1:
-        print("".join(self.canvas[y]))
-      else:
-        print("".join(self.canvas[y]), end="", flush=True)
+      ris += "".join(self.canvas[y])
+    print(ris, end='', flush=True)
 
 
   def render_plot(self):
@@ -422,6 +428,7 @@ class Interpolator:
 
 if __name__ == "__main__":
   
+  print("\033[?25l")
   terminal = Terminal()
   terminal.plot_manager.set_y_limits(0, 100)
 
@@ -450,6 +457,8 @@ if __name__ == "__main__":
       terminal.insert_string_horizontal(f"Current progress: {terminal.plot_manager.analytics['current_perc']:.1f}%", 2, int(3 * terminal.h / 4) + 3)
 
       # interpolation data
+      if len(terminal.plot_manager.original) > 2:
+        terminal.insert_string_horizontal(f"ETA: {(terminal.plot_manager.original[-1][0] * 100 / terminal.plot_manager.analytics['current_perc']) - terminal.plot_manager.original[-1][0]:.1f}s", terminal.w // 2, int(3 * terminal.h / 4) + 3)
 
       # METADATA            
       # for index, stringa in enumerate(terminal.plot_manager.metadata):
@@ -458,5 +467,5 @@ if __name__ == "__main__":
       terminal.flip()
     
   except KeyboardInterrupt:
-    terminal.clear()
+    terminal.reset(clear=True)
     print(terminal.main_color.reset())
