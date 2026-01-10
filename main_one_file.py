@@ -48,13 +48,15 @@ class FileManager:
     stat = os.stat(self.args.f)
     self.state = (stat.st_mtime, stat.st_size)
 
-    if self.state != self.prev:
+    update_request = self.state != self.prev
+
+    if update_request:
       with open(self.args.f, "r") as f:
           self.readings += 1
           self.content = f.read()
       self.prev = self.state
 
-    return self.content
+    return self.content, update_request
 
   
   def convert_to_array(self, content):
@@ -87,9 +89,9 @@ class FileManager:
 
 
   def load_data_from_file(self):
-    c = self.open_file()
+    c, update_request = self.open_file()
     data, metadata = self.convert_to_array(c)
-    return data, metadata
+    return data, metadata, update_request
   
 # ----------------------------------------------------------------
 # ----------------------------------------------------------------
@@ -114,6 +116,7 @@ class PlotManager:
       'x_tracked' : None
     }
 
+    self.set_boundaries(0, 0, 10, 10)
     self.set_x_limits()
     self.set_y_limits()
     self.set_x_unit('seconds')
@@ -292,6 +295,10 @@ class Terminal:
 
   def __init__(self, args):
     self.args = args
+    
+    self.w, self.h = 0, 0
+    self.w_old, self.h_old = None, None
+    
     self.update()
     self.reset_canvas()
     self.frame_number = 0
@@ -326,8 +333,10 @@ class Terminal:
 
   def update(self):
     self.start_frame_time = time.perf_counter()
+    self.w_old, self.h_old = self.w, self.h
     self.w, self.h = self.get_size()
     self.aspect_ratio = self.w / self.h
+    return self.w_old != self.w or self.h_old != self.h
 
 
   def get_size(self):
@@ -449,10 +458,14 @@ class Terminal:
     self.insert_string_horizontal(text, x + 3, y, color)
 
 
-  def update_data_from_file(self):
-    c, m = self.file_manager.load_data_from_file()
-    c = self.color_plot(c, self.data_plot.color)
-    self.data_plot.set_plot_data(c, m)
+  def update_data_from_file(self, force_update=False):
+    c, m, update_request = self.file_manager.load_data_from_file()
+
+    if update_request or force_update: 
+      c = self.color_plot(c, self.data_plot.color)
+      self.data_plot.set_plot_data(c, m)
+    
+    return update_request or force_update
     
   
   def color_plot(self, c, color):
@@ -551,15 +564,12 @@ if __name__ == "__main__":
 
       terminal.data_plot.set_y_limits(0, 100)
   
-      y_interpol = [min(coords[1], coords[3]) for coords in terminal.interpol_data]
-      limite = min(y_interpol) if len(y_interpol) > 2 else 1
-      
       if args.i == "y":
+        y_interpol = [min(coords[1], coords[3]) for coords in terminal.interpol_data]
+        limite = min(y_interpol) if len(y_interpol) > 2 else 1
         terminal.interpol_plot.set_y_limits(min(0, limite), None)
       
-      terminal.update()
-      terminal.reset_canvas()
-
+      update = terminal.update()
       if args.i == "y":
         x1, y1, x2, y2 = 1, 1, (terminal.w - 2) // 2, int(4 * terminal.h / 5) - 2
         terminal.data_plot.set_boundaries(x1, y1, x2 - x1, y2 - y1)
@@ -572,6 +582,14 @@ if __name__ == "__main__":
         x1, y1, x2, y2 = (terminal.w) // 2 + 2, 1, terminal.w - 3, int(4 * terminal.h / 5) - 2
         terminal.interpol_plot.set_boundaries(x1, y1, x2 - x1, y2 - y1)
 
+      update = terminal.update_data_from_file(force_update=update)
+      
+      if not update:
+        continue
+
+      terminal.reset_canvas()
+
+
       if args.i == "y":
         terminal.insert_colored_frame(terminal.w // 2 + 1, 0, terminal.w // 2 - 2, int(4 * terminal.h / 5) - 1, "ETA section", (5, 2, 1))
         terminal.insert_colored_frame(0, 0, terminal.w // 2, int(4 * terminal.h / 5) - 1, "Plot section", (2, 3, 4))
@@ -580,7 +598,6 @@ if __name__ == "__main__":
       
       terminal.insert_colored_frame(0, int(4 * terminal.h / 5), terminal.w - 1, int(terminal.h / 5), "Data section", (2, 5, 3))
 
-      terminal.update_data_from_file()
       terminal.update_interpol()
 
       terminal.render_plot('data')
